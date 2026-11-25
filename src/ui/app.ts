@@ -41,7 +41,7 @@ class App {
     return {
       ...DEFAULT_NARRATION,
       rules: [...s.globalRules, ...(this.book?.pronunciation ?? [])],
-      irishLexicon: s.irishLexicon, pauseScale: s.pauseScale, narrateFootnotes: s.narrateFootnotes,
+      irishLexicon: s.irishLexicon, narrateFootnotes: s.narrateFootnotes,
     };
   }
 
@@ -78,6 +78,7 @@ class App {
     const n = new Narrator(book, this.narration(), { tts: this.tts, cache: this.cache, player: this.player });
     const cover = await getCover(id);
     if (cover) n.coverUrl = URL.createObjectURL(cover);
+    n.pauseScale = settings().pauseScale;
     this.narrator = n;
     this.changed();
     await n.load();

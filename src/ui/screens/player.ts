@@ -30,6 +30,13 @@ export function renderPlayer(root: HTMLElement) {
   const playBtn = h('button.play', { 'aria-label': 'Play', onclick: () => start() }, 'Play');
   const speed = h('input', { type: 'range', min: 0.5, max: 2.5, step: 0.05, value: b.speed, 'aria-label': 'Narration speed' });
   const speedVal = h('div.val', null, `${b.speed.toFixed(2)}×`);
+  const pauses = h('input', { type: 'range', min: 0.4, max: 2, step: 0.1, value: settings().pauseScale, 'aria-label': 'Pause length' });
+  const pausesVal = h('div.val', null, '');
+  const pfill = () => { pauses.style.setProperty('--p', `${((Number(pauses.value) - 0.4) / 1.6) * 100}%`); pausesVal.textContent = Number(pauses.value) < 0.8 ? 'Brisk' : Number(pauses.value) > 1.2 ? 'Relaxed' : 'Natural'; };
+  pfill();
+  const setPauses = (v: number) => { pauses.value = String(v); pfill(); updateSettings({ pauseScale: v }); n.setPauseScale(v); };
+  pauses.addEventListener('input', pfill);
+  pauses.addEventListener('change', () => setPauses(Number(pauses.value)));
   const sleepRow = h('div.row', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' } });
   const prepBox = h('div');
   let dragging = false;
@@ -82,7 +89,7 @@ export function renderPlayer(root: HTMLElement) {
     tBook.textContent = `${Math.round(s.bookProgress * 100)}% · ${fmtDuration(s.remainingSec)} left in book`;
     const v = app.voiceLoading;
     if (v) { status.className = 'status'; status.textContent = `Downloading voice… ${Math.round(v.frac * 100)}% (${v.what}). One time only.`; }
-    else if (s.state === 'buffering') { status.className = 'status'; status.textContent = 'Preparing the next passage…'; }
+    else if (s.state === 'buffering' || s.holding) { status.className = 'status'; status.textContent = s.holdTarget > 0 ? `Getting a little ahead so it plays smoothly… ${Math.round(s.queuedSec)} of ${Math.round(s.holdTarget)} s` : 'Preparing the next passage…'; }
     else if (s.state === 'error') { status.className = 'status err'; status.textContent = s.message ?? 'Something went wrong. Your place is saved.'; }
     else if (s.state === 'finished') { status.className = 'status'; status.textContent = 'You have reached the end of the book.'; }
     else if (s.message) { status.className = 'status'; status.textContent = s.message; }
@@ -137,6 +144,10 @@ export function renderPlayer(root: HTMLElement) {
     h('div.eyebrow', null, 'Speed'), h('div.speedrow', null, speed, speedVal),
     h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' } },
       ...[0.8, 1, 1.25, 1.5, 2].map((r) => h('button.chip', { onclick: () => { speed.value = String(r); fill(); n.setSpeed(r); updateSettings({ speed: r }); } }, `${r}×`))),
+    h('div.eyebrow', { style: { marginTop: '18px' } }, 'Pauses between sentences'),
+    h('div.speedrow', null, pauses, pausesVal),
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' } },
+      ...([['Brisk', 0.6], ['Natural', 1], ['Relaxed', 1.4]] as Array<[string, number]>).map(([label, v]) => h('button.chip', { onclick: () => setPauses(v) }, label))),
     h('hr.rule'),
     h('div.eyebrow', null, 'Sleep timer'), sleepRow,
     h('hr.rule'),

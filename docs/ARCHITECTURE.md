@@ -50,3 +50,9 @@ Two response headers (in `public/_headers`): `Cross-Origin-Opener-Policy: same-o
 <base>/piper/<name>.onnx and .onnx.json     (Piper voices)
 ```
 Serve with `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`.
+
+## Natural flow (0.3)
+- Pauses depend on punctuation: full stop 0.24 s, question 0.30 s, comma/colon 0.14 s, mid-sentence split 0.08 s, paragraph 0.6 s, heading 1.0 s.
+- A "Pauses" control (Brisk / Natural / Relaxed, 0.4–2×) scales them instantly at playback time; nothing is regenerated.
+- Before starting, and after any underrun, the player holds briefly while the narrator builds a small lead, so slow phones get one longer wait instead of many tiny gaps.
+- Awaiting physical-device verification on iPhone.

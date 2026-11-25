@@ -25,6 +25,8 @@ export interface NarSnapshot {
   speed: number;
   sleep?: { kind: 'minutes' | 'chapter'; endsAt?: number };
   genMsPerSec: number; // seconds of work per second of audio (rolling), for the buffering indicator
+  holding: boolean; // building a short buffer before (re)starting
+  holdTarget: number; // seconds of audio wanted before starting
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -53,6 +55,10 @@ export class Narrator {
   private skipped = 0;
   leadSec = 90;
   aheadSec = 180;
+  pauseScale = 1;
+  private holding = false;
+  private holdTarget = 0;
+  private holdSince = 0;
 
   constructor(
     public book: BookRecord,
@@ -132,6 +138,7 @@ export class Narrator {
       speed: rate,
       sleep: this.sleepTimer ? { kind: this.sleepTimer.kind, endsAt: this.sleepTimer.endsAt } : undefined,
       genMsPerSec: this.rtf,
+      holding: this.holding, holdTarget: this.holdTarget,
     };
   }
   private chapterEndIdx(ch: number): number {
@@ -147,10 +154,12 @@ export class Narrator {
     if (!this.utts.length) return;
     if (this.state === 'finished') { this.seekTo(0); }
     this.wantPlaying = true;
+    this.underruns = 0;
     try {
-      await this.deps.player.play();
+      await this.deps.player.play(true);
     } catch (e) { this.setState('error', `Could not start audio: ${(e as Error).message}`); return; }
-    this.setState(this.deps.player.queuedSeconds > 0.2 ? 'playing' : 'buffering');
+    this.beginHold(this.startTarget());
+    this.setState('buffering');
     this.startProducer();
     this.bindMediaSession();
   }
@@ -171,7 +180,7 @@ export class Narrator {
     if (this.state === 'finished') this.state = 'paused';
     this.emit();
     void this.savePosition(true);
-    if (this.wantPlaying) this.startProducer();
+    if (this.wantPlaying) { this.beginHold(this.startTarget()); this.setState('buffering'); this.startProducer(); }
   }
   seekToBlock(block: number, offset = 0): void { this.seekTo(findUtterance(this.utts, block, offset)); }
   async playFromBlock(block: number, offset = 0): Promise<void> { this.seekToBlock(block, offset); await this.play(); }
@@ -209,6 +218,10 @@ export class Narrator {
     this.book.speed = rate;
     void putBook(this.book);
     // already-queued audio was stretched at the old speed: restart from the current sentence
+    this.seekTo(this.idx);
+  }
+  setPauseScale(v: number): void {
+    this.pauseScale = Math.max(0.4, Math.min(2, v));
     this.seekTo(this.idx);
   }
   async setVoice(voice: string): Promise<void> {
@@ -258,11 +271,26 @@ export class Narrator {
       this.pause();
     }
   }
+  /** Seconds of narration to have ready before (re)starting, so playback does not stutter if making audio is slower than playing it. */
+  private startTarget(): number { return Math.min(45, 5 + 25 * Math.max(0, this.rtf * (this.deps.player.rate || 1) - 0.4)); }
+  private rebufferTarget(): number { return Math.min(60, 10 + 45 * Math.max(0, this.rtf * (this.deps.player.rate || 1) - 0.4) + this.underruns * 5); }
+  private beginHold(target: number) {
+    this.holding = true; this.holdTarget = target; this.holdSince = Date.now();
+    this.deps.player.hold();
+  }
+  private maybeRelease() {
+    if (!this.holding) return;
+    const q = this.deps.player.queuedSeconds;
+    const done = this.nextPush >= this.utts.length;
+    if (q >= this.holdTarget || done || (q > 1 && Date.now() - this.holdSince > 40_000)) {
+      this.holding = false; this.deps.player.release(); this.emit();
+    }
+  }
   private onUnderrun() {
     if (!this.wantPlaying) return;
     this.underruns++;
+    this.beginHold(this.rebufferTarget());
     this.setState('buffering');
-    if (this.underruns >= 2) { this.leadSec = Math.min(600, this.leadSec * 1.6); this.underruns = 0; }
   }
   private onInterrupted() {
     if (!this.wantPlaying) return;
@@ -315,16 +343,17 @@ export class Narrator {
   private async produce(gen: number) {
     const alive = () => gen === this.gen;
     while (alive()) {
+      this.maybeRelease();
       try {
         if (this.nextPush < this.utts.length && this.deps.player.queuedSeconds < this.leadSec) {
           const i = this.nextPush;
           const clip = await this.clipFor(i);
           if (!alive()) return;
           if (clip.pcm.length === 0) { this.nextPush++; continue; }
-          this.deps.player.push(i, clip.pcm, clip.sampleRate, this.utts[i].pauseAfter);
+          this.deps.player.push(i, clip.pcm, clip.sampleRate, this.utts[i].pauseAfter * this.pauseScale);
           this.nextPush = i + 1;
           if (this.prefetch < this.nextPush) this.prefetch = this.nextPush;
-          if (this.state === 'buffering' && this.deps.player.queuedSeconds > 1.5 && this.wantPlaying) this.setState('playing');
+          this.maybeRelease();
           this.emit();
           continue;
         }
@@ -334,6 +363,7 @@ export class Narrator {
           this.prefetch++;
           continue;
         }
+        this.maybeRelease();
         if (this.nextPush >= this.utts.length && this.prefetch >= this.utts.length) return;
         await sleep(200);
       } catch (e) {

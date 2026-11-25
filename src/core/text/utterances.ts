@@ -17,7 +17,8 @@ export const DEFAULT_NARRATION: NarrationOptions = {
   rules: [], irishLexicon: true, norm: { and: true, years: true, dayFirst: true }, pauseScale: 1, narrateFootnotes: false,
 };
 
-const PAUSE = { sentence: 0.28, paragraph: 0.75, heading: 1.2, beforeHeading: 1.1, quote: 0.65, verse: 0.45, ellipsis: 0.45 };
+// Seconds of silence. The voice already leaves about 0.08 s of breath at each end of a clip, so these are kept small.
+const PAUSE = { period: 0.24, question: 0.3, comma: 0.14, mid: 0.08, paragraph: 0.6, heading: 1.0, beforeHeading: 0.9, quote: 0.55, verse: 0.4, ellipsis: 0.42 };
 
 let compiled: { sig: string; r: CompiledRules } | null = null;
 export function rulesFor(o: NarrationOptions): CompiledRules {
@@ -46,7 +47,11 @@ export function buildChapterUtterances(blocks: Block[], chapter: Chapter, o: Nar
     const nextIsHeading = blocks[bi + 1]?.kind === 'heading';
     const lines = b.kind === 'verse' ? b.text.split('\n').map((t, i, a) => ({ t, off: a.slice(0, i).join('\n').length + (i ? 1 : 0) })) : [{ t: b.text, off: 0 }];
     for (const line of lines) {
-      const sents = splitSentences(line.t).flatMap((s) => splitLong(s));
+      const sents: Array<{ start: number; end: number; text: string; joined: boolean }> = [];
+      for (const sen of splitSentences(line.t)) {
+        const parts = splitLong(sen);
+        parts.forEach((pt, k) => sents.push({ ...pt, joined: k < parts.length - 1 }));
+      }
       for (let si = 0; si < sents.length; si++) {
         const s = sents[si];
         if (!speakable(s.text)) continue;
@@ -54,10 +59,12 @@ export function buildChapterUtterances(blocks: Block[], chapter: Chapter, o: Nar
         if (!speakable(spoken)) continue;
         const lastOfBlock = si === sents.length - 1;
         if (b.kind === 'heading' && !/[.!?…:]$/.test(spoken)) spoken += '.';
-        let pause = PAUSE.sentence;
-        if (/…["”’)]*$/.test(s.text)) pause = PAUSE.ellipsis;
+        const tail = s.text.replace(/["”’')\]]+$/, '');
+        let pause = /[?!]$/.test(tail) ? PAUSE.question : /[,;:—–-]$/.test(tail) ? PAUSE.comma : PAUSE.period;
+        if (s.joined) pause = /[,;:—–-]$/.test(tail) ? PAUSE.comma : PAUSE.mid;
+        if (/…$/.test(tail)) pause = PAUSE.ellipsis;
         if (lastOfBlock) pause = b.kind === 'heading' ? PAUSE.heading : b.kind === 'quote' ? PAUSE.quote : b.kind === 'verse' ? PAUSE.verse : nextIsHeading ? PAUSE.beforeHeading : PAUSE.paragraph;
-        push({ block: b.id, start: line.off + s.start, end: line.off + s.end, spoken, pauseAfter: pause, heading: b.kind === 'heading' });
+        push({ block: b.id, start: line.off + s.start, end: line.off + s.end, spoken, pauseAfter: pause, heading: b.kind === 'heading', joined: s.joined });
       }
     }
   }

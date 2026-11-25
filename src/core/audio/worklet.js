@@ -10,6 +10,7 @@ class BookPlayer extends AudioWorkletProcessor {
     this.gain = 0;          // current gain for click-free start/stop
     this.target = 0;
     this.underrun = false;
+    this.holding = false;   // when true, wait before starting the next clip (lets the app build a buffer)
     this.sinceReport = 0;
     this.port.onmessage = (e) => {
       const m = e.data;
@@ -17,6 +18,8 @@ class BookPlayer extends AudioWorkletProcessor {
       else if (m.type === 'play') { this.playing = true; this.target = 1; }
       else if (m.type === 'pause') { this.target = 0; this.pausing = true; }
       else if (m.type === 'clear') { this.q = []; this.cur = null; this.off = 0; this.underrun = false; }
+      else if (m.type === 'hold') { this.holding = true; }
+      else if (m.type === 'release') { this.holding = false; this.underrun = false; }
       else if (m.type === 'volume') { this.vol = m.value; }
     };
     this.vol = 1;
@@ -36,7 +39,7 @@ class BookPlayer extends AudioWorkletProcessor {
       else if (this.gain > this.target) this.gain = Math.max(this.target, this.gain - step);
       let s = 0;
       if (this.target > 0 || this.gain > 0) {
-        if (!this.cur && this.playing) this.nextItem();
+        if (!this.cur && this.playing && !this.holding) this.nextItem();
         if (this.cur) {
           const len = this.cur.data.length;
           s = this.off < len ? this.cur.data[this.off] : 0;
@@ -47,7 +50,7 @@ class BookPlayer extends AudioWorkletProcessor {
             this.cur = null;
             this.port.postMessage({ type: 'end', uid });
           }
-        } else if (this.playing && !this.underrun) {
+        } else if (this.playing && !this.underrun && !this.holding) {
           this.underrun = true;
           this.port.postMessage({ type: 'underrun' });
         }

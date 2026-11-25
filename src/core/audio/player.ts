@@ -63,13 +63,17 @@ export class Player {
     this.ready = true;
   }
 
-  async play(): Promise<void> {
+  async play(holdFirst = false): Promise<void> {
     await this.init();
+    if (holdFirst) this.node.port.postMessage({ type: 'hold' });
     if (this.ctx.state !== 'running') await this.ctx.resume();
     try { await this.keepAlive.play(); } catch { /* autoplay rules: fine if it fails, Web Audio still plays */ }
     this.node.port.postMessage({ type: 'play' });
     this.playing = true;
   }
+  /** Stay silent (without losing the queue) until release() is called. */
+  hold(): void { if (this.ready) this.node.port.postMessage({ type: 'hold' }); }
+  release(): void { if (this.ready) this.node.port.postMessage({ type: 'release' }); }
   pause(): void {
     if (!this.ready) return;
     this.node.port.postMessage({ type: 'pause' });

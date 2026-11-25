@@ -67,7 +67,7 @@ function draw() {
 
     h('div.sec', null, h('h2', null, 'Narration'),
       h('div.line', null, h('div', null, h('div.t', null, 'Pauses'), h('div.d', null, 'Between sentences and paragraphs. Longer feels more like a person reading aloud.')),
-        h('div.ctl', null, h('input', { type: 'range', min: 0.5, max: 1.6, step: 0.1, value: s.pauseScale, 'aria-label': 'Pause length', onchange: async (e: any) => { updateSettings({ pauseScale: Number(e.target.value) }); await app.refreshNarration(); } }))),
+        h('div.ctl', null, h('input', { type: 'range', min: 0.5, max: 1.6, step: 0.1, value: s.pauseScale, 'aria-label': 'Pause length', onchange: (e: any) => { updateSettings({ pauseScale: Number(e.target.value) }); app.narrator?.setPauseScale(Number(e.target.value)); } }))),
       toggle('Irish names and places', 'Say names like Siobhán, Dún Laoghaire and Ó Súilleabháin the Irish way. Built-in list, still growing.', s.irishLexicon, async (v) => { updateSettings({ irishLexicon: v }); await app.refreshNarration(); }),
       toggle('Read footnotes aloud', 'Off by default so notes do not interrupt the story.', s.narrateFootnotes, async (v) => { updateSettings({ narrateFootnotes: v }); await app.refreshNarration(); }),
       h('div.line', null, h('div', null, h('div.t', null, 'Reading text size')),

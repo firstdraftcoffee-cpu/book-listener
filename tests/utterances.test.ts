@@ -26,6 +26,16 @@ describe('utterance builder', () => {
     const head = u.find((x) => x.block === 0)!, mid = u.find((x) => x.block === 1)!, last = u.filter((x) => x.block === 1).pop()!;
     expect(head.pauseAfter).toBeGreaterThan(last.pauseAfter); expect(last.pauseAfter).toBeGreaterThan(mid.pauseAfter - 1e-9);
   });
+  it('uses short pauses inside a long split sentence and punctuation-aware pauses elsewhere', () => {
+    const long: Block[] = [{ id: 0, kind: 'paragraph', chapter: 0, text: 'Although the merchants of the city had argued for decades about the price of tea, the quality of the roast and the rights of the guild to set both, the matter was settled in a single afternoon by a clerk who had never tasted either. Was it fair? Perhaps.' }];
+    const u2 = buildChapterUtterances(long, ch, DEFAULT_NARRATION);
+    const joined = u2.filter((x) => x.joined);
+    expect(joined.length).toBeGreaterThan(0);
+    for (const j of joined) expect(j.pauseAfter).toBeLessThan(0.2);
+    const q = u2.find((x) => /fair\?$/.test(x.spoken))!;
+    const period = u2.find((x) => /afternoon|either\.$/.test(x.spoken) && !x.joined)!;
+    expect(q.pauseAfter).toBeGreaterThan(period.pauseAfter);
+  });
   it('finds a saved position', () => {
     u.forEach((x, i) => (x.idx = i));
     const third = u.find((x) => x.block === 3)!;

@@ -62,6 +62,7 @@ export interface Utterance {
   pauseAfter: number; // seconds of silence after this utterance
   chapter: number;
   heading?: boolean;
+  joined?: boolean; // first half of a long sentence that was split for the voice
 }
 
 export interface BookRecord {
