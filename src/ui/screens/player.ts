@@ -2,6 +2,7 @@ import { h, mount, fmtDuration } from '../dom';
 import { app } from '../app';
 import { settings, updateSettings } from '../settings';
 import { addAnnotation } from '../annot';
+import { putBook } from '../../core/store/db';
 import { toast } from '../toast';
 import { voiceById } from '../../core/tts/voices';
 import type { NarSnapshot } from '../../core/audio/narrator';
@@ -125,9 +126,12 @@ export function renderPlayer(root: HTMLElement) {
   mount(root, h('div.player', null,
     eyebrow, title, line, chapTrack, h('div.times', null, tChap), bookBar, h('div.times', { style: { marginTop: '6px' } }, tBook),
     h('div.transport', null,
-      skipBtn('⏮', 'Previous chapter', () => n.prevChapter()), skipBtn('−15', 'Back 15 seconds', () => n.skip(-15)),
+      skipBtn('−15', 'Back 15 seconds', () => n.skip(-15)),
       playBtn,
-      skipBtn('+30', 'Forward 30 seconds', () => n.skip(30)), skipBtn('⏭', 'Next chapter', () => n.nextChapter())),
+      skipBtn('+30', 'Forward 30 seconds', () => n.skip(30))),
+    h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '8px' } },
+      h('button.btn.quiet', { 'aria-label': 'Previous chapter', onclick: () => n.prevChapter() }, '‹ Previous chapter'),
+      h('button.btn.quiet', { 'aria-label': 'Next chapter', onclick: () => n.nextChapter() }, 'Next chapter ›')),
     status,
     h('hr.rule'),
     h('div.eyebrow', null, 'Speed'), h('div.speedrow', null, speed, speedVal),
@@ -154,10 +158,19 @@ function chapterSheet(root: HTMLElement) {
   const n = app.narrator!, b = app.book!;
   const cur = n.snapshot().chapter;
   const s = h('div.sheet', { role: 'dialog', 'aria-label': 'Chapters' }, h('div.eyebrow', null, 'Chapters'),
+    h('p.small.muted', { style: { margin: '6px 0 0', lineHeight: '1.45' } }, 'Tap a title to jump there. Untick “Listen” to skip a chapter every time.'),
     h('div.chapter-list', { style: { marginTop: '8px' } },
-      ...b.chapters.filter((c) => c.included).map((c) => h('button' + (c.id === cur ? '.cur' : ''), { onclick: () => { n.gotoChapter(c.id); s.remove(); } },
-        h('span', null, c.title), h('span.w', null, `${c.words.toLocaleString('en-IE')} words`)))),
+      ...b.chapters.map((c) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', borderTop: '1px solid var(--rule)', opacity: c.included ? '1' : '.55' } },
+        h('button' + (c.id === cur ? '.cur' : ''), { style: { border: '0', flex: '1' }, disabled: !c.included, onclick: () => { n.gotoChapter(c.id); s.remove(); } },
+          h('span', null, c.title), h('span.w', null, `${c.words.toLocaleString('en-IE')} words`)),
+        h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted)' } },
+          h('input', { type: 'checkbox', checked: c.included, 'aria-label': `Listen to ${c.title}`, style: { width: '22px', height: '22px', accentColor: 'var(--green)' },
+            onchange: async (e: any) => {
+              c.included = e.target.checked;
+              await putBook(b);
+              await app.refreshNarration();
+              s.remove(); chapterSheet(root);
+            } }), 'Listen')))),
     h('div.row', null, h('button.btn.quiet', { onclick: () => s.remove() }, 'Close')));
   document.body.appendChild(s);
-  void root;
 }

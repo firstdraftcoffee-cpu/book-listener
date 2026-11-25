@@ -93,6 +93,7 @@ export async function renderReader(root: HTMLElement) {
     mount(mini,
       h('button.pp', { 'aria-label': playing ? 'Pause' : 'Play', onclick: () => playFromHere() }, playing ? 'Pause' : 'Play'),
       h('div.t', null, n!.chapterOf(s.idx)?.title ?? b!.title),
+      h('button.linkish.small', { 'aria-label': 'Next chapter', onclick: () => n!.nextChapter() }, 'Next ›'),
       h('button.linkish.small', { onclick: () => { if (u) { chapterId = u.chapter; sel.value = String(chapterId); draw(); } } }, 'Find my place'));
   }
   async function playFromHere() {
