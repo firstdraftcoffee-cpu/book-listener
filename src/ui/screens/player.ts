@@ -1,6 +1,9 @@
 import { h, mount, fmtDuration } from '../dom';
 import { app } from '../app';
 import { settings, updateSettings } from '../settings';
+import { flagHere } from '../annot';
+import { flagsSheet, openFlags } from '../flags';
+import { pronounceSheet } from '../pronounce';
 import { addAnnotation } from '../annot';
 import { putBook } from '../../core/store/db';
 import { toast } from '../toast';
@@ -101,31 +104,45 @@ export function renderPlayer(root: HTMLElement) {
   unsub = n.subscribe(update);
   const tick = window.setInterval(() => { if (!root.isConnected) clearInterval(tick); else if (n.state === 'playing') update(n.snapshot()); }, 1000);
 
+  const flagBtn = h('button.btn.quiet.sm', { onclick: () => flagsSheet(drawFlagCount) }, '');
+  const drawFlagCount = () => { flagBtn.textContent = `Flagged spots (${openFlags().length})`; };
+  drawFlagCount();
   const skipBtn = (label: string, aria: string, f: () => void) => h('button', { 'aria-label': aria, onclick: f }, label);
 
   function drawPrep() {
     const info = prep;
+    const sx = n!.snapshot().speedX;
+    const hourMin = sx > 0 ? Math.max(1, Math.round(60 / sx)) : 0;
     mount(prepBox,
       info ? h('div', null, h('div.small', null, `${info.label}: ${info.done} of ${info.total} passages · about ${fmtDuration(info.eta)} to go`), h('div.bar', null, h('i', { style: { width: `${(info.done / info.total) * 100}%` } })),
+        h('p.small.muted', { style: { margin: '8px 0', lineHeight: '1.45' } }, 'Keep Book Listener open on screen while it works. It keeps the screen awake for you. Plug in if you can.'),
         h('div.row', { style: { marginTop: '10px' } }, h('button.btn.quiet.sm', { onclick: () => { info.signal.cancelled = true; prep = null; drawPrep(); } }, 'Stop')))
-        : h('div.row', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          h('button.btn.quiet.sm', { onclick: () => runPrep('chapter') }, 'Prepare this chapter'),
-          h('button.btn.quiet.sm', { onclick: () => runPrep('rest') }, 'Prepare rest of book')));
+        : h('div', null,
+          hourMin ? h('p.small.muted', { style: { margin: '0 0 10px', lineHeight: '1.45' } }, `On this phone, each hour of listening takes about ${hourMin} minute${hourMin === 1 ? '' : 's'} to prepare.`) : null,
+          h('div.row', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            h('button.btn.solid.sm', { onclick: () => runPrep({ minutes: 60, label: 'Next hour' }) }, 'Next hour'),
+            h('button.btn.quiet.sm', { onclick: () => runPrep({ minutes: 120, label: 'Next 2 hours' }) }, 'Next 2 hours'),
+            h('button.btn.quiet.sm', { onclick: () => runPrep('chapter') }, 'This chapter'),
+            h('button.btn.quiet.sm', { onclick: () => runPrep('rest') }, 'Rest of book'))));
   }
-  async function runPrep(what: 'chapter' | 'rest') {
+  async function runPrep(what: 'chapter' | 'rest' | { minutes: number; label: string }) {
     try { await app.ensureVoice(b!.voice); } catch (e) { toast(`Couldn’t load the voice: ${(e as Error).message}`); return; }
     const s = n!.snapshot();
-    const [cs, ce] = n!.chapterRange(s.chapter);
-    const from = s.idx, to = what === 'chapter' ? ce : n!.utts.length;
+    const [, ce] = n!.chapterRange(s.chapter);
+    const from = s.idx;
+    const to = what === 'chapter' ? ce : what === 'rest' ? n!.utts.length : n!.indexAfterMinutes(from, what.minutes);
+    const label = what === 'chapter' ? 'This chapter' : what === 'rest' ? 'Rest of book' : what.label;
     const signal = { cancelled: false };
-    prep = { done: 0, total: Math.max(1, to - from), eta: 0, label: what === 'chapter' ? 'Chapter' : 'Book', signal };
+    prep = { done: 0, total: Math.max(1, to - from), eta: 0, label, signal };
     drawPrep();
+    let wake: any = null;
+    try { wake = await (navigator as any).wakeLock?.request('screen'); } catch { /* not allowed: fine */ }
     try {
       await n!.prepare(from, to, (done, total, eta) => { if (prep) { prep.done = done; prep.total = total; prep.eta = eta; drawPrep(); } }, signal);
-      if (!signal.cancelled) toast('Ready to listen offline');
+      if (!signal.cancelled) toast('Ready. This will play smoothly, even offline.');
     } catch (e) { toast(`Stopped: ${(e as Error).message}`); }
+    try { await wake?.release(); } catch { /* ignore */ }
     prep = null; drawPrep();
-    void cs;
   }
   drawPrep();
 
@@ -139,6 +156,10 @@ export function renderPlayer(root: HTMLElement) {
     h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '8px' } },
       h('button.btn.quiet', { 'aria-label': 'Previous chapter', onclick: () => n.prevChapter() }, '‹ Previous chapter'),
       h('button.btn.quiet', { 'aria-label': 'Next chapter', onclick: () => n.nextChapter() }, 'Next chapter ›')),
+    h('button.btn.solid', { style: { width: '100%', marginBottom: '8px' }, 'aria-label': 'Flag this spot', onclick: async () => { await flagHere(); drawFlagCount(); } }, 'Flag this spot'),
+    h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' } },
+      flagBtn,
+      h('button.btn.quiet.sm', { onclick: () => { const u = n.utts[n.snapshot().idx]; const prev = n.utts[n.snapshot().idx - 1]; const t = [prev, u].filter(Boolean).map((x) => b.chapters ? (n.blocksByChapter.get(x!.chapter) ?? []).find((bl) => bl.id === x!.block)?.text.slice(x!.start, x!.end) ?? '' : '').join(' '); pronounceSheet(t || (u?.spoken ?? '')); } }, 'Fix a pronunciation')),
     status,
     h('hr.rule'),
     h('div.eyebrow', null, 'Speed'), h('div.speedrow', null, speed, speedVal),
@@ -159,8 +180,8 @@ export function renderPlayer(root: HTMLElement) {
       } }, 'Bookmark here'),
       h('button.btn.quiet.sm', { onclick: () => app.go('settings') }, `Voice: ${v?.name ?? b.voice}`)),
     h('hr.rule'),
-    h('div.eyebrow', null, 'Listen without waiting'),
-    h('p.small.muted', { style: { lineHeight: '1.5', margin: '8px 0 12px' } }, 'Narration is made on this device. Preparing ahead while the app is open means it can play on a locked screen or offline without pausing to make more.'),
+    h('div.eyebrow', null, 'Get ready for the road'),
+    h('p.small.muted', { style: { lineHeight: '1.5', margin: '8px 0 12px' } }, 'Do this on Wi-Fi, ideally charging. Prepared narration plays with no gaps and works offline, even with the phone locked.'),
     prepBox));
   update(n.snapshot());
 }

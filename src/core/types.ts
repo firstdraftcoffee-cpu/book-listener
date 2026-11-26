@@ -86,7 +86,7 @@ export interface BookRecord {
   pronunciation: PronunciationRule[];
 }
 
-export type AnnotationKind = 'bookmark' | 'note' | 'awkward' | 'repetition' | 'pronunciation' | 'fact';
+export type AnnotationKind = 'bookmark' | 'flag' | 'note' | 'awkward' | 'repetition' | 'pronunciation' | 'fact';
 
 export interface Annotation {
   id: string;

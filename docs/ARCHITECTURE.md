@@ -56,3 +56,8 @@ Serve with `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: c
 - A "Pauses" control (Brisk / Natural / Relaxed, 0.4–2×) scales them instantly at playback time; nothing is regenerated.
 - Before starting, and after any underrun, the player holds briefly while the narrator builds a small lead, so slow phones get one longer wait instead of many tiny gaps.
 - Awaiting physical-device verification on iPhone.
+
+## On the road (0.4)
+- **Get ready for the road**: Player screen buttons prepare the next hour, 2 hours, the chapter or the rest of the book into the on-device cache. The screen is kept awake while it works (Wake Lock, where Safari allows it). Awaiting physical-device verification.
+- **Flag this spot**: one tap saves a `flag` annotation covering the sentence playing and the one before it. "Flagged spots" lists all open ones with Go there / Fix pronunciation / Done / Delete. Flags are included in the notes export.
+- **Fix a pronunciation** from the Player, with a "Hear it" preview of the spoken form before saving.

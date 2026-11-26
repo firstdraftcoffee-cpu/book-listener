@@ -284,6 +284,10 @@ export class Narrator {
   private workload(): number { return this.rtf * (this.deps.player.rate || 1); }
   private startTarget(): number { const e = this.workload(); return e < 0.8 ? 6 : Math.min(240, 15 + 200 * (e - 0.8)); }
   private rebufferTarget(): number { const e = this.workload(); return e < 0.8 ? 8 + this.underruns * 2 : Math.min(240, 20 + 200 * (e - 0.8) + this.underruns * 5); }
+  /** First utterance index after `minutes` of narration from `from`. */
+  indexAfterMinutes(from: number, minutes: number): number { let to = from; while (to < this.utts.length && this.estSec(from, to) < minutes * 60) to++; return to; }
+  /** Rough seconds this device needs to make utterances [from, to). */
+  prepSecondsEstimate(from: number, to: number): number { return this.estSec(from, to) * this.rtf; }
   private warmToken: { cancelled: boolean } | null = null;
   /** While paused, quietly make the next few minutes of speech so pressing play starts with a cushion. */
   warm(): void {

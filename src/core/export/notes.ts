@@ -1,6 +1,6 @@
 import type { Annotation, BookRecord, Block } from '../types';
 
-const LABEL: Record<string, string> = { bookmark: 'Bookmark', note: 'Note', awkward: 'Awkward phrasing', repetition: 'Repetition', pronunciation: 'Mispronounced', fact: 'Check fact' };
+const LABEL: Record<string, string> = { flag: 'Flagged while listening', bookmark: 'Bookmark', note: 'Note', awkward: 'Awkward phrasing', repetition: 'Repetition', pronunciation: 'Mispronounced', fact: 'Check fact' };
 
 /** A Markdown file of every note and flag, in book order, each with the passage and where it is. */
 export function notesToMarkdown(book: BookRecord, anns: Annotation[], blocksOf: (chapter: number) => Block[]): string {

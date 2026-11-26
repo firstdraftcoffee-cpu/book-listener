@@ -1,6 +1,7 @@
 import { h, mount, clear } from '../dom';
 import { app } from '../app';
-import { addAnnotation, removeAnnotation, KIND_LABEL } from '../annot';
+import { addAnnotation, removeAnnotation, flagHere, KIND_LABEL } from '../annot';
+import { pronounceSheet } from '../pronounce';
 import { putAnnotation, putBook, uid } from '../../core/store/db';
 import { notesToMarkdown, download } from '../../core/export/notes';
 import { toast } from '../toast';
@@ -93,6 +94,7 @@ export async function renderReader(root: HTMLElement) {
     mount(mini,
       h('button.pp', { 'aria-label': playing ? 'Pause' : 'Play', onclick: () => playFromHere() }, playing ? 'Pause' : 'Play'),
       h('div.t', null, n!.chapterOf(s.idx)?.title ?? b!.title),
+      h('button.linkish.small', { 'aria-label': 'Flag this spot', onclick: () => void flagHere() }, 'Flag'),
       h('button.linkish.small', { 'aria-label': 'Next chapter', onclick: () => n!.nextChapter() }, 'Next ›'),
       h('button.linkish.small', { onclick: () => { if (u) { chapterId = u.chapter; sel.value = String(chapterId); draw(); } } }, 'Find my place'));
   }
@@ -130,26 +132,8 @@ export async function renderReader(root: HTMLElement) {
         h('button.btn.quiet.sm', { onclick: close }, 'Close')),
       note,
       h('div.row', null, mk('bookmark', 'Bookmark'), mk('note', 'Note'), mk('awkward', 'Awkward'), mk('repetition', 'Repetition'), mk('fact', 'Check fact')),
-      h('div.row', null, h('button.chip', { onclick: () => { close(); pronounceSheet(text); } }, 'Fix a pronunciation…')));
+      h('div.row', null, h('button.chip', { onclick: () => { close(); pronounceSheet(text, () => void draw()); } }, 'Fix a pronunciation…')));
     document.body.appendChild(sheet);
-  }
-
-  function pronounceSheet(passage: string) {
-    const words = [...new Set(passage.match(/[\p{L}’'-]{3,}/gu) ?? [])].slice(0, 14);
-    const word = h('input.field', { placeholder: 'Word as written', 'aria-label': 'Word as written' });
-    const say = h('input.field', { placeholder: 'How it should sound, e.g. Shiv-awn', 'aria-label': 'How it should sound', style: { marginTop: '8px' } });
-    const s = h('div.sheet', { role: 'dialog' }, h('div.eyebrow', null, 'Fix a pronunciation'),
-      h('div.row', null, ...words.map((w) => h('button.chip', { onclick: () => { word.value = w; say.focus(); } }, w))),
-      h('div', { style: { marginTop: '10px' } }, word, say),
-      h('p.small.muted', null, 'Spell it the way you would say it, or use IPA between slashes, like /ʃɪˈvɔːn/. Applies to this book.'),
-      h('div.row', null,
-        h('button.btn.solid', { onclick: async () => {
-          if (!word.value.trim() || !say.value.trim()) return;
-          b!.pronunciation = [...b!.pronunciation.filter((r) => r.match.toLowerCase() !== word.value.trim().toLowerCase()), { id: uid(), match: word.value.trim(), say: say.value.trim() }];
-          await putBook(b!); s.remove(); toast('Rule saved. Rebuilding narration…'); await app.refreshNarration(); void draw();
-        } }, 'Save rule'),
-        h('button.btn.quiet', { onclick: () => s.remove() }, 'Cancel')));
-    document.body.appendChild(s);
   }
 
   function reviewList(anns: Annotation[], chTitle: string) {
