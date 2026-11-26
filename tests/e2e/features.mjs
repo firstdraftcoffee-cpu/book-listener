@@ -34,8 +34,8 @@ await p.click('.chip:has-text("1.5×")'); await p.waitForTimeout(500);
 ok('speed 1.5 applied', (await p.evaluate(() => window.__app.player.rate)) === 1.5);
 await p.click('.chip:has-text("30 min")'); ok('sleep timer set', (await p.evaluate(() => !!window.__app.narrator.snapshot().sleep)));
 // pronunciation rule changes the spoken text
-await p.evaluate(async () => { const a = window.__app; a.book.pronunciation = [{ id: 'x', match: 'Dún Laoghaire', say: 'Dun Leery' }]; await a.refreshNarration(); });
-ok('pronunciation rule applied', await p.evaluate(() => window.__app.narrator.utts.some((u) => /Dun Leery/.test(u.spoken))));
+await p.evaluate(async () => { const a = window.__app; const w = (a.narrator.utts.map((u) => u.spoken.match(/\b[A-Z][a-z]{5,}\b/)).find(Boolean) || [])[0]; window.__word = w; a.book.pronunciation = [{ id: 'x', match: w, say: 'Zzyzx Leery' }]; await a.refreshNarration(); });
+ok('pronunciation rule applied', await p.evaluate(() => window.__app.narrator.utts.some((u) => /Zzyzx Leery/.test(u.spoken))));
 // chapter WAV export (tiny book, so it finishes quickly)
 await p.click('.tabs button:nth-child(1)'); await p.waitForSelector('.add');
 await p.setInputFiles('input[type=file]', { name: 'tiny.txt', mimeType: 'text/plain', buffer: Buffer.from('Chapter 1\n\nThe kettle boiled. Siobhán poured the coffee.\n\nIt cost €2.50.') });

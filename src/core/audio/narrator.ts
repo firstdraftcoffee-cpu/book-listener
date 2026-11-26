@@ -158,6 +158,7 @@ export class Narrator {
   async play(): Promise<void> {
     if (!this.utts.length) return;
     if (this.state === 'finished') { this.seekTo(0); }
+    this.cancelWarm();
     this.wantPlaying = true;
     this.underruns = 0;
     try {
@@ -173,6 +174,7 @@ export class Narrator {
     this.deps.player.pause();
     this.setState('paused');
     void this.savePosition(true);
+    this.warm();
   }
   toggle(): void { (this.state === 'playing' || this.state === 'buffering') ? this.pause() : void this.play(); }
 
@@ -278,8 +280,21 @@ export class Narrator {
     }
   }
   /** Seconds of narration to have ready before (re)starting, so playback does not stutter if making audio is slower than playing it. */
-  private startTarget(): number { return Math.min(45, 5 + 25 * Math.max(0, this.rtf * (this.deps.player.rate || 1) - 0.4)); }
-  private rebufferTarget(): number { return Math.min(25, 6 + 30 * Math.max(0, this.rtf * (this.deps.player.rate || 1) - 0.4) + this.underruns * 2); }
+  /** How hard the phone is working: 1 means making speech exactly as fast as it is played. Above 1 it cannot keep up. */
+  private workload(): number { return this.rtf * (this.deps.player.rate || 1); }
+  private startTarget(): number { const e = this.workload(); return e < 0.8 ? 6 : Math.min(240, 15 + 200 * (e - 0.8)); }
+  private rebufferTarget(): number { const e = this.workload(); return e < 0.8 ? 8 + this.underruns * 2 : Math.min(240, 20 + 200 * (e - 0.8) + this.underruns * 5); }
+  private warmToken: { cancelled: boolean } | null = null;
+  /** While paused, quietly make the next few minutes of speech so pressing play starts with a cushion. */
+  warm(): void {
+    this.cancelWarm();
+    if (!this.utts.length) return;
+    const tok = { cancelled: false }; this.warmToken = tok;
+    const from = this.idx; let to = from;
+    while (to < this.utts.length && this.estSec(from, to) < 300) to++;
+    void this.prepare(from, to, () => {}, tok).catch(() => {});
+  }
+  private cancelWarm() { if (this.warmToken) this.warmToken.cancelled = true; this.warmToken = null; }
   private beginHold(target: number) {
     this.holding = true; this.holdTarget = target; this.holdSince = Date.now();
     this.deps.player.hold();
@@ -366,7 +381,7 @@ export class Narrator {
       this.maybeRelease();
       this.watchdog();
       try {
-        if (this.nextPush < this.utts.length && this.deps.player.queuedSeconds < this.leadSec) {
+        if (this.nextPush < this.utts.length && this.deps.player.queuedSeconds < Math.max(this.leadSec, this.holdTarget + 30)) {
           const i = this.nextPush;
           const clip = await this.clipFor(i);
           if (!alive()) return;
@@ -378,7 +393,7 @@ export class Narrator {
           this.emit();
           continue;
         }
-        if (this.prefetch < this.utts.length && this.estSec(this.nextPush, this.prefetch) < this.aheadSec) {
+        if (this.prefetch < this.utts.length && this.estSec(this.nextPush, this.prefetch) < Math.max(this.aheadSec, this.workload() > 0.9 ? 300 : 0)) {
           await this.clipFor(this.prefetch);
           if (!alive()) return;
           this.prefetch++;

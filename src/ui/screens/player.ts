@@ -93,7 +93,7 @@ export function renderPlayer(root: HTMLElement) {
     else if (s.state === 'error') { status.className = 'status err'; status.textContent = s.message ?? 'Something went wrong. Your place is saved.'; }
     else if (s.state === 'finished') { status.className = 'status'; status.textContent = 'You have reached the end of the book.'; }
     else if (s.message) { status.className = 'status'; status.textContent = s.message; }
-    else { status.className = 'status'; status.textContent = s.state === 'loading' ? 'Opening the book…' : playing ? `${app.voiceName()} · ${Math.round(s.queuedSec)} s ready ahead · ${s.speedX ? s.speedX.toFixed(1) + '× real time' : 'measuring'} · ${s.stalls} stall${s.stalls === 1 ? '' : 's'}` : `${app.voiceName()} · paused`; }
+    else { status.className = 'status'; status.textContent = s.state === 'loading' ? 'Opening the book…' : playing ? `${app.voiceName()} · ${Math.round(s.queuedSec)} s ready ahead · ${s.speedX ? s.speedX.toFixed(1) + '× real time' : 'measuring'} · ${s.stalls} stall${s.stalls === 1 ? '' : 's'}${s.speedX && s.speedX < 1.15 ? ' · your phone is working flat out: tap “Prepare this chapter” below for gap-free listening' : ''}` : `${app.voiceName()} · paused`; }
     speedVal.textContent = `${s.speed.toFixed(2)}×`;
     const key = JSON.stringify(s.sleep ?? null);
     if (key !== lastSleep) { lastSleep = key; drawSleep(s); }
