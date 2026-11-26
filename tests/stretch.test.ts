@@ -1,3 +1,4 @@
+import { capSilences } from '../src/core/tts/kokoro';
 import { describe, it, expect } from 'vitest';
 import { timeStretch } from '../src/core/audio/stretch';
 
@@ -30,5 +31,15 @@ describe('WSOLA time stretch', () => {
   it('rate 1 returns the same samples', () => {
     const x = tone(220, 1);
     expect(timeStretch(x, 1, sr)).toBe(x);
+  });
+});
+
+describe('capSilences', () => {
+  it('shortens a long internal gap but leaves speech and short gaps alone', () => {
+    const sr = 24000, tone = (n: number) => Float32Array.from({ length: n }, (_, i) => 0.3 * Math.sin(i / 5));
+    const a = new Float32Array(sr * 2); a.set(tone(sr / 2), 0); a.set(tone(sr / 2), sr * 1.5);
+    const out = capSilences(a, sr);
+    expect(out.length).toBeLessThan(a.length - sr * 0.6);
+    expect(out.length).toBeGreaterThan(sr * 1.1);
   });
 });

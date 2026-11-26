@@ -143,5 +143,32 @@ export function trimSilence(a: Float32Array, sr = 24000, thresh = 0.004, keepMs 
   const keep = Math.floor((sr * keepMs) / 1000);
   s = Math.max(0, s - keep);
   e = Math.min(a.length, e + keep);
-  return a.slice(s, e);
+  return capSilences(a.slice(s, e), sr);
+}
+
+/** Shorten long quiet stretches inside a clip (the model sometimes leaves 0.4 s+ gaps at commas), keeping a natural breath. */
+export function capSilences(a: Float32Array, sr = 24000, maxMs = 170, thresh = 0.006): Float32Array {
+  const win = Math.floor(sr * 0.01), maxWins = Math.round(maxMs / 10);
+  const n = Math.floor(a.length / win);
+  const quiet: boolean[] = [];
+  for (let w = 0; w < n; w++) {
+    let m = 0;
+    for (let i = w * win; i < (w + 1) * win; i++) { const v = Math.abs(a[i]); if (v > m) m = v; }
+    quiet.push(m < thresh);
+  }
+  const keep: Array<[number, number]> = [];
+  let w = 0, cut = false;
+  while (w < n) {
+    let e = w;
+    if (quiet[w]) { while (e < n && quiet[e]) e++; const len = e - w; if (len > maxWins) { cut = true; keep.push([w, w + maxWins]); } else keep.push([w, e]); }
+    else { while (e < n && !quiet[e]) e++; keep.push([w, e]); }
+    w = e;
+  }
+  if (!cut) return a;
+  const total = keep.reduce((t, [x, y]) => t + (y - x) * win, 0) + (a.length - n * win);
+  const out = new Float32Array(total);
+  let o = 0;
+  for (const [x, y] of keep) { out.set(a.subarray(x * win, y * win), o); o += (y - x) * win; }
+  out.set(a.subarray(n * win), o);
+  return out;
 }

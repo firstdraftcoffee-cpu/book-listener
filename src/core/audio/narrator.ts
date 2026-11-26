@@ -8,7 +8,7 @@ import { cacheKey, type AudioCache } from './cache';
 import type { Player } from './player';
 import type { Clip, TtsClient } from '../tts/client';
 
-export const ENGINE_VERSION = 'k1';
+export const ENGINE_VERSION = 'k2';
 
 export type NarState = 'idle' | 'loading' | 'buffering' | 'playing' | 'paused' | 'error' | 'finished';
 export interface NarSnapshot {
@@ -25,6 +25,8 @@ export interface NarSnapshot {
   speed: number;
   sleep?: { kind: 'minutes' | 'chapter'; endsAt?: number };
   genMsPerSec: number; // seconds of work per second of audio (rolling), for the buffering indicator
+  stalls: number; // times playback ran dry this session
+  speedX: number; // how many times faster than real time the phone makes speech (1 = just keeping up)
   holding: boolean; // building a short buffer before (re)starting
   holdTarget: number; // seconds of audio wanted before starting
 }
@@ -52,6 +54,7 @@ export class Narrator {
   private sleepTimer: { kind: 'minutes' | 'chapter'; endsAt?: number; handle?: number } | undefined;
   private wantPlaying = false;
   private underruns = 0;
+  private totalStalls = 0;
   private skipped = 0;
   leadSec = 90;
   aheadSec = 180;
@@ -138,7 +141,7 @@ export class Narrator {
       speed: rate,
       sleep: this.sleepTimer ? { kind: this.sleepTimer.kind, endsAt: this.sleepTimer.endsAt } : undefined,
       genMsPerSec: this.rtf,
-      holding: this.holding, holdTarget: this.holdTarget,
+      holding: this.holding, holdTarget: this.holdTarget, stalls: this.totalStalls, speedX: this.rtf > 0 ? 1 / this.rtf : 0,
     };
   }
   private chapterEndIdx(ch: number): number {
@@ -289,6 +292,7 @@ export class Narrator {
   private onUnderrun() {
     if (!this.wantPlaying) return;
     this.underruns++;
+    this.totalStalls++;
     this.beginHold(this.rebufferTarget());
     this.setState('buffering');
   }
