@@ -55,6 +55,8 @@ export class Narrator {
   private wantPlaying = false;
   private underruns = 0;
   private totalStalls = 0;
+  private lastProgress = Date.now();
+  private lastKick = 0;
   private skipped = 0;
   leadSec = 90;
   aheadSec = 180;
@@ -258,6 +260,7 @@ export class Narrator {
   private onStart(uid: number) {
     if (uid < 0 || uid >= this.utts.length) return;
     this.idx = uid;
+    this.lastProgress = Date.now();
     if (this.state === 'buffering' || this.state === 'paused') if (this.wantPlaying) this.setState('playing');
     this.emit();
     this.updateMediaSession();
@@ -276,7 +279,7 @@ export class Narrator {
   }
   /** Seconds of narration to have ready before (re)starting, so playback does not stutter if making audio is slower than playing it. */
   private startTarget(): number { return Math.min(45, 5 + 25 * Math.max(0, this.rtf * (this.deps.player.rate || 1) - 0.4)); }
-  private rebufferTarget(): number { return Math.min(60, 10 + 45 * Math.max(0, this.rtf * (this.deps.player.rate || 1) - 0.4) + this.underruns * 5); }
+  private rebufferTarget(): number { return Math.min(25, 6 + 30 * Math.max(0, this.rtf * (this.deps.player.rate || 1) - 0.4) + this.underruns * 2); }
   private beginHold(target: number) {
     this.holding = true; this.holdTarget = target; this.holdSince = Date.now();
     this.deps.player.hold();
@@ -285,8 +288,21 @@ export class Narrator {
     if (!this.holding) return;
     const q = this.deps.player.queuedSeconds;
     const done = this.nextPush >= this.utts.length;
-    if (q >= this.holdTarget || done || (q > 1 && Date.now() - this.holdSince > 40_000)) {
+    const waited = Date.now() - this.holdSince;
+    if (q >= this.holdTarget || done || (q > 0.5 && waited > 12_000) || waited > 20_000) {
+      this.lastProgress = Date.now();
       this.holding = false; this.deps.player.release(); this.emit();
+    }
+  }
+  /** If audio is queued and we are meant to be playing but nothing has started for a while (the phone may have quietly suspended audio), nudge it. */
+  private watchdog() {
+    if (!this.wantPlaying || this.holding) return;
+    const now = Date.now();
+    if (this.deps.player.queuedSeconds > 2 && now - this.lastProgress > 7000 && now - this.lastKick > 7000) {
+      this.lastKick = now;
+      this.totalStalls++;
+      this.deps.player.release();
+      void this.deps.player.play(false).catch(() => {});
     }
   }
   private onUnderrun() {
@@ -348,6 +364,7 @@ export class Narrator {
     const alive = () => gen === this.gen;
     while (alive()) {
       this.maybeRelease();
+      this.watchdog();
       try {
         if (this.nextPush < this.utts.length && this.deps.player.queuedSeconds < this.leadSec) {
           const i = this.nextPush;
